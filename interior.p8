@@ -172,6 +172,7 @@ end
 function game_new()
   return {
     cash = 200,
+    target_cash = 200,
     drop_timer = 0,
     work_timer = 0,
     state = "decorating",
@@ -393,7 +394,7 @@ function _update()
 
       local pos = find_empty()
 
-      GAME.cash -= 40
+      GAME.target_cash -= 40
 
       if GAME.cash < 0 then
         GAME.state = "starved"
@@ -414,6 +415,10 @@ end
 
 function _draw()
   if GAME.state == "decorating" then
+    if GAME.cash > GAME.target_cash then
+      GAME.cash -= 1
+    end
+
     GAME.drop_timer += 1
 
     cls()
