@@ -35,6 +35,20 @@ ITEM_TYPES = {
   computer_chair = { sprite = 25 }, 
 }
 
+function keys(t)
+  local ks = {}
+  local n = 0
+
+  for k,v in pairs(t) do
+    n += 1
+    ks[n] = k
+  end
+
+  return ks, n
+end
+
+ITEM_KEYS, ITEM_COUNT = keys(ITEM_TYPES) 
+
 NE = 0
 ENTITY_ID = 0
 
@@ -205,33 +219,6 @@ COMPUTER_CHAIR = item_new("computer_chair", {
   movable = false,
 })
 
-item_new("tv", {
-  pos = {x = 5, y = 3},
-  movable = true,
-})
-
--- testing the corners
-item_new("tv", {
-  pos = {x = 0, y = 0},
-  movable = true,
-})
-
-item_new("tv", {
-  pos = {x = 0, y = 6},
-  movable = true,
-})
-
-item_new("tv", {
-  pos = {x = 9, y = 0},
-  movable = true,
-})
-
-item_new("tv", {
-  pos = {x = 9, y = 6},
-  movable = true,
-})
-
-
 HERO = hero_new {pos = {x = 6, y = 3}}
 
 DIR_TO_VEL = {
@@ -380,6 +367,7 @@ function find_empty()
   end
 
   if count == 0 then
+    printh("NO ROOM")
     return nil
   end
 
@@ -387,9 +375,12 @@ function find_empty()
 end
 
 function random_item(pos)
-  return item_new("tv", {
-    movable = true,
+  t = ITEM_KEYS[flr(rnd(ITEM_COUNT))]
+  printh(t)
+
+  return item_new(t, {
     pos = pos,
+    movable = true,
   })
 end
 
@@ -399,6 +390,7 @@ function _update()
     -- 30fps * 10s
     if GAME.drop_timer > 200 then
       GAME.drop_timer = 0
+
       local pos = find_empty()
 
       GAME.cash -= 40
@@ -406,16 +398,16 @@ function _update()
       if GAME.cash < 0 then
         GAME.state = "starved"
         return
-      elseif not pos then
+      end
+
+      if not pos then
         GAME.state = "crushed"
         return
-      else
-        printh("insert random item")
-        printh(pos.x)
-        printh(pos.y)
-        map_insert(pos, random_item(pos))
       end
+
+      random_item(pos)
     end
+
     hero_update(HERO)
   end
 end
@@ -434,6 +426,7 @@ function _draw()
         end
       end
     end
+    print("CASH: $"..GAME.cash)
   elseif GAME.state == "working" then
     cls()
     local x = rnd(100)
