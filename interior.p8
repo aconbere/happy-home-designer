@@ -35,16 +35,19 @@ ITEM_TYPES = {
   computer_chair = { sprite = 25 }, 
 }
 
+NE = 0
 ENTITY_ID = 0
 
+MAP_X_COUNT = 10
+MAP_Y_COUNT = 7
 MAP = {
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+  { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
+  { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
+  { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
+  { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
+  { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
+  { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
+  { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
 }
 
 function map_get(pos)
@@ -92,7 +95,10 @@ function bg_collision(top_left, dim, flag)
   -- top_right = x+w, y
   -- bottom_right = x+w, y+h
 
+  -- take the "sprite" position and turn it into
+  -- pixel positions for bg map comparision
   pos = scale_position(top_left)
+
   if fget(mget(pos.x / 8, pos.y / 8), flag) or
      fget(mget(pos.x / 8, (pos.y + dim.y) / 8), flag) or
      fget(mget((pos.x + dim.x) / 8, pos.y/ 8), flag) or
@@ -118,8 +124,8 @@ end
 
 function scale_position(pos)
   return {
-    x = (pos.x + 3) * 8,
-    y = (pos.y + 3) * 8,
+    x = (pos.x + 2) * 8,
+    y = (pos.y + 2) * 8,
   }
 end
 
@@ -135,19 +141,16 @@ function entity_new(opts)
     sprite = opts.sprite,
     visible = opts.visible or true,
     movable = opts.movable,
-    _draw = entity_draw,
   }
 
-  if opts.map then
-    map_insert(opts.pos, entity)
-  end
+   map_insert(opts.pos, entity)
 
   return entity
 end
 
-function entity_draw(entity)
+function entity_draw(entity, pos)
   if entity.visible then
-    sprite_draw(merge(entity.sprite, scale_position(entity.pos)))
+    sprite_draw(merge(entity.sprite, scale_position(pos)))
   end
 end
 
@@ -250,71 +253,127 @@ item_new("tv", {
 
 HERO = hero_new {pos = {x = 6, y = 3}}
 
-function move_item(e)
-end
+DIR_TO_VEL = {
+  n = { x = 0,  y = -1 },
+  e = { x = 1,  y = 0  },
+  s = { x = 0,  y = 1  },
+  w = { x = -1, y = 0  },
+}
 
-function next_position(pos, vel, direction)
-  if not direction then
-    return pos
+function shift_dir(start, dir)
+  local vel = DIR_TO_VEL[dir]
+
+  local e = map_get(start)
+
+  if e == NE then
+    return false
   end
 
-  local x = {
-    n = {x = pos.x,         y = pos.y - vel.y},
-    e = {x = pos.x + vel.x, y = pos.y},
-    s = {x = pos.x,         y = pos.y + vel.y},
-    w = {x = pos.x - vel.x, y = pos.y},
-  }
+  local next_pos = apply_dir(start, dir)
 
-  return x[direction]
+  map_insert(next_pos, e)
+  map_insert(start, NE)
+  e.pos = next_pos
 end
 
-function move(map, index, pos)
-  local i = map.get(index)
+function apply_dir(pos, dir)
+  local vel = DIR_TO_VEL[dir]
+
+  return {
+    x = pos.x + vel.x,
+    y = pos.y + vel.y,
+  }
 end
 
 function hero_update(hero)
   local dir = btn_direction()
 
+  if not dir then
+    return
+  end
+
   local old_pos = hero.pos
+  local new_pos = apply_dir(old_pos, dir)
 
-  hero.pos = next_position(hero.pos, hero.vel, dir)
-
-  if bg_collision(hero.pos, hero.dim, WALL_FLAG) then
-    hero.pos = old_pos
-  else
-    local collision = map_get(hero.pos)
+  if not bg_collision(new_pos, hero.dim, WALL_FLAG) then
+    local collision = map_get(new_pos)
 
     if collision then
-      if not collision.movable then
-        hero.pos = old_pos
-      else
-        -- try moving the item we collided with
-        new_item_pos = next_position(collision.pos, collision.vel, dir)
-
-        collision.pos = new_item_pos
-        printh(map_get(new_item_pos).x)
-        printh(new_item_pos.x)
-
-        -- printh("collision")
-        -- printh(collision.pos.x)
-        -- printh(collision.pos.y)
-
-        -- printh("new position")
-        -- printh(new_item_pos.x)
-        -- printh(new_item_pos.y)
-
-        -- printh("hero")
-        -- printh(new_item_pos.x)
-        -- printh(new_item_pos.y)
-
-        -- if not map_get(new_item_pos) then
-        --   collision.pos = new_item_pos
-        -- end
-
+      if collision.movable then
+        shift_dir(collision.pos, dir)
+        shift_dir(hero.pos, dir)
       end
+    else
+      shift_dir(hero.pos, dir)
     end
   end
 end
+
+function can_move_into(e)
+  if e == NE then
+    return true
+  end
+
+  return e.movable
+end
+
+-- looks in a direction through MAP to find if
+-- there is an empty slot.
+function empty_slot(pos, dir)
+  if dir == "n" then
+    for y = pos.y, y-1, y > 0 do
+      local e = map_get({x = pos.x, y = y})
+      return can_move_into(e)
+    end
+  elseif dir == "e" then
+    for x = pos.x, x+1, x <= MAP_X_COUNT do
+      local e = map_get({x = x, y = pos.y})
+      return can_move_into(e)
+    end
+  elseif dir == "s" then
+    for y = pos.y, y+1, y <= MAP_Y_COUNT do
+      local e = map_get({x = pos.x, y = y})
+      return can_move_into(e)
+    end
+  elseif dir == "w" then
+    for x = pos.x, x-1, x > 0 do
+      local e = map_get({x = x, y = pos.y})
+      return can_move_into(e)
+    end
+  end
+
+  -- this is a failure scenario
+  return false
+end
+
+function shift(pos, dir)
+  if dir == "n" then
+    for y = pos.y, y-1, y > 0 do
+      local e = map_get({x = pos.x, y = y})
+      return can_move_into(e)
+    end
+  elseif dir == "e" then
+    for x = pos.x, x+1, x <= MAP_X_COUNT do
+      local e = map_get({x = x, y = pos.y})
+      return can_move_into(e)
+    end
+  elseif dir == "s" then
+    for y = pos.y, y+1, y <= MAP_Y_COUNT do
+      local e = map_get({x = pos.x, y = y})
+      return can_move_into(e)
+    end
+  elseif dir == "w" then
+    for x = pos.x, x-1, x > 0 do
+      local e = map_get({x = x, y = pos.y})
+      return can_move_into(e)
+    end
+  end
+
+  -- this is a failure scenario
+  return false
+
+end
+
 
 function _init()
   game = game_new()
@@ -334,15 +393,15 @@ function _draw()
   cls()
   map(0,0,0,0,64,64)
 
-  for i, row in ipairs(MAP) do
-    for j, e in ipairs(row) do 
-      if e != 0 then
-        e._draw(e)
+  for y, row in ipairs(MAP) do
+    for x, e in ipairs(row) do 
+      if e != NE then
+        entity_draw(e, {x = x, y = y})
       end
     end
   end
 
-  HERO._draw(HERO)
+  -- entity_draw(HERO, HERO.pos)
 end
 
 __gfx__
