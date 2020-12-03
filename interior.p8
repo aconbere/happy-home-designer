@@ -38,8 +38,8 @@ ITEM_TYPES = {
 NE = 0
 ENTITY_ID = 0
 
-MAP_X_COUNT = 10
-MAP_Y_COUNT = 7
+MAP_X_COUNT = 9
+MAP_Y_COUNT = 6
 MAP = {
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
@@ -76,33 +76,13 @@ function next_id()
   return ENTITY_ID
 end
 
--- Okay to this function is going to start with X,Y then it's going to search
--- from X to X+W and Y to Y+W in increments of 1 to see if any of those Pixels
--- hits a Map tile.  If it hits a map tile then we have a collision and we
--- return true.
---
--- top_left: {x,y} of a sprite
--- dim: size of the sprite
-function bg_collision(top_left, dim, flag)
-  -- note in the future we can use fget to check the
-  -- returned sprite for any flags (which could indicate solid)
+function bg_collision(pos, flag)
+  local pos = {
+    x = pos.x + 3,
+    y = pos.y + 3
+  }
 
-  -- Starting from the top left and bottom left check
-  -- check if the new bottom left corner hits a tile
-
-  -- top_left = x, y
-  -- bottom_left = x, y+h
-  -- top_right = x+w, y
-  -- bottom_right = x+w, y+h
-
-  -- take the "sprite" position and turn it into
-  -- pixel positions for bg map comparision
-  pos = scale_position(top_left)
-
-  if fget(mget(pos.x / 8, pos.y / 8), flag) or
-     fget(mget(pos.x / 8, (pos.y + dim.y) / 8), flag) or
-     fget(mget((pos.x + dim.x) / 8, pos.y/ 8), flag) or
-     fget(mget((pos.x + dim.x )/ 8, (pos.y + dim.y) / 8), flag) then
+  if fget(mget(pos.x, pos.y), flag) then
     return true
   end
 
@@ -177,7 +157,8 @@ end
 
 function game_new()
   return {
-    coins = 0,
+    cash = 200,
+    drop_timer = 0,
     work_timer = 0,
     state = "decorating",
   }
@@ -271,9 +252,18 @@ function shift_dir(start, dir)
 
   local next_pos = apply_dir(start, dir)
 
+  if next_pos.x > MAP_X_COUNT or
+    next_pos.x < 0 or
+    next_pos.y > MAP_Y_COUNT or
+    next_pos.y < 0 then
+    printh("out of map")
+    return false
+  end
+
   map_insert(next_pos, e)
   map_insert(start, NE)
   e.pos = next_pos
+  return true
 end
 
 function apply_dir(pos, dir)
@@ -295,13 +285,16 @@ function hero_update(hero)
   local old_pos = hero.pos
   local new_pos = apply_dir(old_pos, dir)
 
-  if not bg_collision(new_pos, hero.dim, WALL_FLAG) then
+  if not bg_collision(new_pos, WALL_FLAG) then
     local collision = map_get(new_pos)
 
     if collision then
-      if collision.movable then
-        shift_dir(collision.pos, dir)
-        shift_dir(hero.pos, dir)
+      if collision.label == "computer_chair" then
+        -- GAME.state = "working"
+      elseif collision.movable then
+        if shift_dir(collision.pos, dir) then
+          shift_dir(hero.pos, dir)
+        end
       end
     else
       shift_dir(hero.pos, dir)
@@ -371,37 +364,90 @@ function shift(pos, dir)
 
   -- this is a failure scenario
   return false
-
 end
 
+function find_empty()
+  local slots = {}
+  local count = 0
 
-function _init()
-  game = game_new()
+  for y, row in ipairs(MAP) do
+    for x, e in ipairs(row) do
+      if e == NE then
+        add(slots, {x = x-1, y = y-1})
+        count += 1
+      end
+    end
+  end
+
+  if count == 0 then
+    return nil
+  end
+
+  return slots[flr(rnd(count))]
 end
 
-function random_item()
+function random_item(pos)
+  return item_new("tv", {
+    movable = true,
+    pos = pos,
+  })
 end
 
 function _update()
   if GAME.state == "working" then
   elseif GAME.state == "decorating" then
+    -- 30fps * 10s
+    if GAME.drop_timer > 200 then
+      GAME.drop_timer = 0
+      local pos = find_empty()
+
+      GAME.cash -= 40
+
+      if GAME.cash < 0 then
+        GAME.state = "starved"
+        return
+      elseif not pos then
+        GAME.state = "crushed"
+        return
+      else
+        printh("insert random item")
+        printh(pos.x)
+        printh(pos.y)
+        map_insert(pos, random_item(pos))
+      end
+    end
     hero_update(HERO)
   end
 end
 
 function _draw()
-  cls()
-  map(0,0,0,0,64,64)
+  if GAME.state == "decorating" then
+    GAME.drop_timer += 1
 
-  for y, row in ipairs(MAP) do
-    for x, e in ipairs(row) do 
-      if e != NE then
-        entity_draw(e, {x = x, y = y})
+    cls()
+    map(0,0,0,0,64,64)
+
+    for y, row in ipairs(MAP) do
+      for x, e in ipairs(row) do 
+        if e != NE then
+          entity_draw(e, {x = x, y = y})
+        end
       end
     end
-  end
+  elseif GAME.state == "working" then
+    cls()
+    local x = rnd(100)
+    local y = rnd(100)
+    -- problem = "> What is " + x + " plus " + y + "?"
 
-  -- entity_draw(HERO, HERO.pos)
+    -- print(problem)
+  elseif GAME.state == "crushed" then
+    cls()
+    print("YOU ARE CRUSHED")
+  elseif GAME.state == "starved" then
+    cls()
+    print("YOU MUST WORK TO EAT")
+  end
 end
 
 __gfx__
