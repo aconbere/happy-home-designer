@@ -52,8 +52,9 @@ ITEM_KEYS, ITEM_COUNT = keys(ITEM_TYPES)
 NE = 0
 ENTITY_ID = 0
 
-MAP_X_COUNT = 9
-MAP_Y_COUNT = 6
+MAP_X_COUNT = 10
+MAP_Y_COUNT = 7
+
 MAP = {
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
@@ -65,7 +66,7 @@ MAP = {
 }
 
 function map_get(pos)
-  e = MAP[pos.y + 1][pos.x + 1]
+  e = MAP[pos.y][pos.x]
   if e == 0 then
     return nil
   end
@@ -74,7 +75,7 @@ function map_get(pos)
 end
 
 function map_insert(pos, entity)
-  MAP[pos.y + 1][pos.x + 1] = entity
+  MAP[pos.y][pos.x] = entity
 end
 
 function merge(a, b)
@@ -92,8 +93,8 @@ end
 
 function bg_collision(pos, flag)
   local pos = {
-    x = pos.x + 3,
-    y = pos.y + 3
+    x = pos.x + 2,
+    y = pos.y + 2
   }
 
   if fget(mget(pos.x, pos.y), flag) then
@@ -193,6 +194,8 @@ end
 function item_new(item_type, opts)
   item_config = ITEM_TYPES[item_type]
 
+  printh(item_type)
+
   return entity_new {
     label = item_type,
     sprite = { index = item_config.sprite },
@@ -206,21 +209,21 @@ end
 GAME = game_new()
 
 COMPUTER = item_new("computer", {
-  pos = {x = 8, y = 1},
+  pos = {x = 9, y = 2},
   movable = false,
 })
 
 CHAIR = item_new("table", {
-  pos = {x = 8, y = 2},
+  pos = {x = 9, y = 3},
   movable = false,
 })
 
 COMPUTER_CHAIR = item_new("computer_chair", {
-  pos = {x = 7, y = 2},
+  pos = {x = 8, y = 3},
   movable = false,
 })
 
-HERO = hero_new {pos = {x = 6, y = 3}}
+HERO = hero_new {pos = {x = 7, y = 4}}
 
 DIR_TO_VEL = {
   n = { x = 0,  y = -1 },
@@ -241,9 +244,9 @@ function shift_dir(start, dir)
   local next_pos = apply_dir(start, dir)
 
   if next_pos.x > MAP_X_COUNT or
-    next_pos.x < 0 or
+    next_pos.x < 1 or
     next_pos.y > MAP_Y_COUNT or
-    next_pos.y < 0 then
+    next_pos.y < 1 then
     printh("out of map")
     return false
   end
@@ -302,7 +305,7 @@ end
 -- there is an empty slot.
 function empty_slot(pos, dir)
   if dir == "n" then
-    for y = pos.y, y-1, y > 0 do
+    for y = pos.y, y-1 y > 0 do
       local e = map_get({x = pos.x, y = y})
       return can_move_into(e)
     end
@@ -361,7 +364,7 @@ function find_empty()
   for y, row in ipairs(MAP) do
     for x, e in ipairs(row) do
       if e == NE then
-        add(slots, {x = x-1, y = y-1})
+        add(slots, {x = x, y = y})
         count += 1
       end
     end
