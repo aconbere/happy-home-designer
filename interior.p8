@@ -377,7 +377,6 @@ end
 
 function random_item(pos)
   t = ITEM_KEYS[flr(rnd(ITEM_COUNT))]
-  printh(t)
 
   return item_new(t, {
     pos = pos,
@@ -391,15 +390,14 @@ function _update()
     -- 30fps * 10s
     if GAME.drop_timer > 200 then
       GAME.drop_timer = 0
-
-      local pos = find_empty()
-
       GAME.target_cash -= 40
 
       if GAME.cash < 0 then
         GAME.state = "starved"
         return
       end
+
+      local pos = find_empty()
 
       if not pos then
         GAME.state = "crushed"
