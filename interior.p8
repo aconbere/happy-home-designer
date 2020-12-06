@@ -35,6 +35,9 @@ ITEM_TYPES = {
 }
 
 COST = 40
+EARNED = 60
+DROP_ACCELERATION = 10
+DROP_TIMER = 160
 
 function shuffle(tbl)
   for i = #tbl, 2, -1 do
@@ -236,7 +239,7 @@ function item_new(item_type, opts)
   item_config = ITEM_TYPES[item_type]
 
   return entity_new {
-    label = item_type,
+    label = opts.label or item_type,
     sprite = { index = item_config.sprite },
     pos = opts.pos,
     dim = { x = 8, y = 8},
@@ -278,6 +281,7 @@ GAME = game_new()
 COMPUTER = item_new("computer", {
   pos = {x = 9, y = 2},
   movable = false,
+  label = "your computer",
   _draw = function (self, pos)
     if GAME.cursor_state then
       self.sprite.index = 54 
@@ -288,7 +292,8 @@ COMPUTER = item_new("computer", {
   end
 })
 
-CHAIR = item_new("table", {
+TABLE = item_new("table", {
+  label = "your table",
   pos = {x = 9, y = 3},
   movable = false,
 })
@@ -296,6 +301,7 @@ CHAIR = item_new("table", {
 COMPUTER_CHAIR = item_new("computer_chair", {
   pos = {x = 8, y = 3},
   movable = false,
+  label = "your chair",
 })
 
 HERO = hero_new {pos = {x = 7, y = 4}}
@@ -352,7 +358,9 @@ function hero_update(hero)
     local collision = map_get(new_pos)
 
     if collision then
-      if collision.label == "computer_chair" then
+      if collision.label == "your chair" or
+         collision.label == "your computer" or
+         collision.label == "your table" then
         GAME.state = "working"
       elseif collision.movable then
         if shift_dir(collision.pos, dir) then
@@ -460,11 +468,9 @@ end
 function working_update()
   if btnp(4) and GAME.problem.selected then
     if GAME.problem.selected == GAME.problem.answer then
-      printh("CORRECT")
-      GAME.target_cash += 10
+      GAME.target_cash += EARNED
       GAME.problem = problem_new()
     else
-      printh("INCORRECT")
       GAME.problem = problem_new()
     end
   elseif btnp(5) then
@@ -479,29 +485,30 @@ function working_update()
 end
 
 function _update()
+  -- 30fps * 10s
+  if GAME.drop_timer > DROP_TIMER then
+    GAME.drop_timer = 0
+    GAME.target_cash -= COST
+
+    if GAME.target_cash <= 0 then
+      GAME.state = "starved"
+      return
+    end
+
+    local pos = find_empty()
+
+    if not pos then
+      GAME.state = "crushed"
+      return
+    end
+
+    random_item(pos)
+    GAME.drop_timer -= DROP_ACCELERATION
+  end
+
   if GAME.state == "working" then
     working_update()
   elseif GAME.state == "decorating" then
-    -- 30fps * 10s
-    if GAME.drop_timer > 200 then
-      GAME.drop_timer = 0
-      GAME.target_cash -= COST
-
-      if GAME.cash <= 0 then
-        GAME.state = "starved"
-        return
-      end
-
-      local pos = find_empty()
-
-      if not pos then
-        GAME.state = "crushed"
-        return
-      end
-
-      random_item(pos)
-    end
-
     hero_update(HERO)
   end
 end
@@ -524,16 +531,16 @@ options_map = {"\139", "\145", "\148", "\131"}
 
 function _draw()
   update_cursor_state()
+
+  if GAME.cash > GAME.target_cash then
+    GAME.cash -= 1
+  elseif GAME.cash < GAME.target_cash then
+    GAME.cash += 1
+  end
+
+  GAME.drop_timer += 1
+
   if GAME.state == "decorating" then
-
-    if GAME.cash > GAME.target_cash then
-      GAME.cash -= 1
-    elseif GAME.cash < GAME.target_cash then
-      GAME.cash += 1
-    end
-
-    GAME.drop_timer += 1
-
     cls()
     map(0,0,0,8,64,64)
 
@@ -556,6 +563,10 @@ function _draw()
 
     problem = "what is " .. GAME.problem.x .. " + " .. GAME.problem.y .. "?"
 
+    color(7)
+    print("CASH: $"..GAME.cash)
+    print("")
+
     color(11)
     print(problem)
 
@@ -571,10 +582,18 @@ function _draw()
     color(7)
   elseif GAME.state == "crushed" then
     cls()
-    print("YOU ARE CRUSHED")
+    print("your possessions fill you")
+    print("with happyness ... ")
+    print("")
+    print("as they slowly crush you under")
+    print("their weight")
   elseif GAME.state == "starved" then
     cls()
-    print("YOU MUST WORK TO EAT")
+    print("your dwindling work output")
+    print("dooms you to failure.")
+    print("")
+    print("use your computer to be")
+    print("more productive")
   end
 end
 
