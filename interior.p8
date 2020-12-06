@@ -34,10 +34,10 @@ ITEM_TYPES = {
   computer_chair = { sprite = 25 }, 
 }
 
-COST = 40
+COST = 10
 EARNED = 60
-DROP_ACCELERATION = 10
-DROP_TIMER = 160
+DROP_ACCELERATION = 1
+DROP_TIMER = 80
 
 function shuffle(tbl)
   for i = #tbl, 2, -1 do
@@ -91,7 +91,7 @@ end
 function map_get(pos)
   e = MAP[pos.y][pos.x]
 
-  if e == 0 then
+  if e == NE then
     return nil
   end
 
@@ -304,7 +304,7 @@ COMPUTER_CHAIR = item_new("computer_chair", {
   label = "your chair",
 })
 
-HERO = hero_new {pos = {x = 7, y = 4}}
+HERO = hero_new {pos = {x = 5, y = 4}}
 
 DIR_TO_VEL = {
   n = { x = 0,  y = -1 },
@@ -313,15 +313,31 @@ DIR_TO_VEL = {
   w = { x = -1, y = 0  },
 }
 
-function shift_dir(start, dir)
+function in_map(pos)
+  return pos.x >= 1 and pos.x <= MAP_X_COUNT and
+         pos.y >= 1 and pos.y <= MAP_Y_COUNT
+end
+
+function first_shiftable(pos, dir)
+  pos = apply_dir(pos, dir)
+
+  while in_map(pos) do
+    local n = map_get(pos)
+
+    if n == nil then
+      return pos
+    else
+      pos = apply_dir(pos, dir)
+    end
+  end
+
+  return nil
+end
+
+function shift(start, dir)
   local vel = DIR_TO_VEL[dir]
 
   local e = map_get(start)
-
-  -- I don't remember why
-  if e == NE then
-    return false
-  end
 
   local next_pos = apply_dir(start, dir)
 
@@ -333,6 +349,29 @@ function shift_dir(start, dir)
   map_insert(start, NE)
   e.pos = next_pos
   return true
+end
+
+function reverse_dir(dir)
+  if dir == "n" then
+    return "s"
+  elseif dir == "e" then
+    return "w"
+  elseif dir == "s" then
+    return "n"
+  elseif dir == "w" then
+    return "e"
+  end
+end
+
+function shift_stack(hole, hero_pos, dir)
+  r_dir = reverse_dir(dir)
+
+  repeat
+    back_pos = apply_dir(hole, r_dir)
+    shift(back_pos, dir)
+    hole = back_pos
+  until (hole.x == hero_pos.x and
+         hole.y == hero_pos.y)
 end
 
 function apply_dir(pos, dir)
@@ -357,71 +396,26 @@ function hero_update(hero)
   if not bg_collision(new_pos, WALL_FLAG) then
     local collision = map_get(new_pos)
 
+    -- we hit something
     if collision then
+      -- it's part of the desk
       if collision.label == "your chair" or
          collision.label == "your computer" or
          collision.label == "your table" then
         GAME.state = "working"
+      -- it's moveable
       elseif collision.movable then
-        if shift_dir(collision.pos, dir) then
-          shift_dir(hero.pos, dir)
+        -- search in dir for a hole
+        local hole = first_shiftable(new_pos, dir)
+
+        if hole then
+          shift_stack(hole, old_pos, dir)
         end
       end
     else
-      shift_dir(hero.pos, dir)
+      shift(hero.pos, dir)
     end
   end
-end
-
-function can_move_into(e)
-  if e == NE then
-    return true
-  end
-
-  return e.movable
-end
-
-function in_map(pos)
-  return pos.x >= 1 and pos.x <= MAP_X_COUNT and
-         pos.y >= 1 and pos.y <= MAP_Y_COUNT
-end
-
--- looks in a direction through MAP to find if
--- there we can shift items that direction
-function can_shift(pos, dir)
-  while in_map(pos) do
-    if can_move_into(e) then
-      return true
-    end
-  end
-  return false
-end
-
-function shift(pos, dir)
-  if dir == "n" then
-    for y = pos.y, y-1, y > 0 do
-      local e = map_get({x = pos.x, y = y})
-      return can_move_into(e)
-    end
-  elseif dir == "e" then
-    for x = pos.x, x+1, x <= MAP_X_COUNT do
-      local e = map_get({x = x, y = pos.y})
-      return can_move_into(e)
-    end
-  elseif dir == "s" then
-    for y = pos.y, y+1, y <= MAP_Y_COUNT do
-      local e = map_get({x = pos.x, y = y})
-      return can_move_into(e)
-    end
-  elseif dir == "w" then
-    for x = pos.x, x-1, x > 0 do
-      local e = map_get({x = x, y = pos.y})
-      return can_move_into(e)
-    end
-  end
-
-  -- this is a failure scenario
-  return false
 end
 
 function find_empty()
@@ -441,7 +435,7 @@ function find_empty()
     return nil
   end
 
-  return slots[flr(rnd(count))]
+  return slots[flr(rnd(count)) + 1]
 end
 
 function random_item(pos)
@@ -485,7 +479,6 @@ function working_update()
 end
 
 function _update()
-  -- 30fps * 10s
   if GAME.drop_timer > DROP_TIMER then
     GAME.drop_timer = 0
     GAME.target_cash -= COST
@@ -503,7 +496,7 @@ function _update()
     end
 
     random_item(pos)
-    GAME.drop_timer -= DROP_ACCELERATION
+    DROP_TIMER -= DROP_ACCELERATION
   end
 
   if GAME.state == "working" then
@@ -583,7 +576,7 @@ function _draw()
   elseif GAME.state == "crushed" then
     cls()
     print("your possessions fill you")
-    print("with happyness ... ")
+    print("with happyiess ... ")
     print("")
     print("as they slowly crush you under")
     print("their weight")
@@ -769,10 +762,10 @@ __map__
 3535313131313131313131313131353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 35353100000000000000003b0031353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 353531000000000000003b3b0031353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+35353400001a0000000000000034353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 3535340000000000000000000034353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 3535340000000000000000000034353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-3535340000000000000000000034353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-3535310000000000000000000031353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+35353100001a000000001a000031353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 3535310000000000000000000031353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 3535313131313131333131313131353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 3535353535353535353535353535353500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
