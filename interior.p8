@@ -1,7 +1,6 @@
 pico-8 cartridge // http://www.pico-8.com
 version 29
 __lua__
-
 WALL_FLAG = 1
 DESK_FLAG = 2
 
@@ -34,6 +33,8 @@ ITEM_TYPES = {
   computer       = { sprite = 54 }, 
   computer_chair = { sprite = 25 }, 
 }
+
+COST = 40
 
 function keys(t)
   local ks = {}
@@ -136,6 +137,7 @@ function entity_new(opts)
     sprite = opts.sprite,
     visible = opts.visible or true,
     movable = opts.movable,
+    _draw = opts._draw,
   }
 
    map_insert(opts.pos, entity)
@@ -145,7 +147,11 @@ end
 
 function entity_draw(entity, pos)
   if entity.visible then
-    sprite_draw(merge(entity.sprite, scale_position(pos)))
+    if entity._draw then
+      entity:_draw(pos)
+    else
+      sprite_draw(merge(entity.sprite, scale_position(pos)))
+    end
   end
 end
 
@@ -176,7 +182,10 @@ function game_new()
     target_cash = 200,
     drop_timer = 0,
     work_timer = 0,
+    cursor_blink_timer = 0,
+    cusor_state = true,
     state = "decorating",
+    problem = problem_new(),
   }
 end
 
@@ -203,6 +212,14 @@ function item_new(item_type, opts)
     dim = { x = 8, y = 8},
     map = true,
     movable = opts.movable,
+    _draw = opts._draw,
+  }
+end
+
+function problem_new()
+  return {
+    x = flr(rnd(100)),
+    y = flr(rnd(100)),
   }
 end
 
@@ -211,6 +228,14 @@ GAME = game_new()
 COMPUTER = item_new("computer", {
   pos = {x = 9, y = 2},
   movable = false,
+  _draw = function (self, pos)
+    if GAME.cursor_state then
+      self.sprite.index = 54 
+    else
+      self.sprite.index = 55
+    end
+    sprite_draw(merge(self.sprite, scale_position(pos)))
+  end
 })
 
 CHAIR = item_new("table", {
@@ -237,16 +262,14 @@ function shift_dir(start, dir)
 
   local e = map_get(start)
 
+  -- I don't remember why
   if e == NE then
     return false
   end
 
   local next_pos = apply_dir(start, dir)
 
-  if next_pos.x > MAP_X_COUNT or
-    next_pos.x < 1 or
-    next_pos.y > MAP_Y_COUNT or
-    next_pos.y < 1 then
+  if not in_map(next_pos) then
     printh("out of map")
     return false
   end
@@ -281,7 +304,7 @@ function hero_update(hero)
 
     if collision then
       if collision.label == "computer_chair" then
-        -- GAME.state = "working"
+        GAME.state = "working"
       elseif collision.movable then
         if shift_dir(collision.pos, dir) then
           shift_dir(hero.pos, dir)
@@ -301,32 +324,19 @@ function can_move_into(e)
   return e.movable
 end
 
+function in_map(pos)
+  return pos.x >= 1 and pos.x <= MAP_X_COUNT and
+         pos.y >= 1 and pos.y <= MAP_Y_COUNT
+end
+
 -- looks in a direction through MAP to find if
--- there is an empty slot.
-function empty_slot(pos, dir)
-  if dir == "n" then
-    for y = pos.y, y-1 y > 0 do
-      local e = map_get({x = pos.x, y = y})
-      return can_move_into(e)
-    end
-  elseif dir == "e" then
-    for x = pos.x, x+1, x <= MAP_X_COUNT do
-      local e = map_get({x = x, y = pos.y})
-      return can_move_into(e)
-    end
-  elseif dir == "s" then
-    for y = pos.y, y+1, y <= MAP_Y_COUNT do
-      local e = map_get({x = pos.x, y = y})
-      return can_move_into(e)
-    end
-  elseif dir == "w" then
-    for x = pos.x, x-1, x > 0 do
-      local e = map_get({x = x, y = pos.y})
-      return can_move_into(e)
+-- there we can shift items that direction
+function can_shift(pos, dir)
+  while in_map(pos) do
+    if can_move_into(e) then
+      return true
     end
   end
-
-  -- this is a failure scenario
   return false
 end
 
@@ -379,7 +389,7 @@ function find_empty()
 end
 
 function random_item(pos)
-  t = ITEM_KEYS[flr(rnd(ITEM_COUNT))]
+  t = ITEM_KEYS[flr(rnd(ITEM_COUNT) + 1)]
 
   return item_new(t, {
     pos = pos,
@@ -393,9 +403,9 @@ function _update()
     -- 30fps * 10s
     if GAME.drop_timer > 200 then
       GAME.drop_timer = 0
-      GAME.target_cash -= 40
+      GAME.target_cash -= COST
 
-      if GAME.cash < 0 then
+      if GAME.cash <= 0 then
         GAME.state = "starved"
         return
       end
@@ -414,7 +424,22 @@ function _update()
   end
 end
 
+function update_cursor_state()
+    GAME.cursor_blink_timer += 1
+
+    if GAME.cursor_blink_timer >= 30 then
+      GAME.cursor_blink_timer = 0
+
+      if GAME.cursor_state then
+        GAME.cursor_state = false
+      else
+        GAME.cursor_state = true
+      end
+    end
+end
+
 function _draw()
+  update_cursor_state()
   if GAME.state == "decorating" then
     if GAME.cash > GAME.target_cash then
       GAME.cash -= 1
@@ -435,11 +460,19 @@ function _draw()
     print("CASH: $"..GAME.cash)
   elseif GAME.state == "working" then
     cls()
-    local x = rnd(100)
-    local y = rnd(100)
-    -- problem = "> What is " + x + " plus " + y + "?"
 
-    -- print(problem)
+    if GAME.cursor_state then
+      cursor = ">"
+    else
+      cursor = " "
+    end
+
+    problem = "what is " .. GAME.problem.x .. " + " .. GAME.problem.y .. "?"
+
+    color(11)
+    print(problem)
+    print("")
+    print(cursor.. " _")
   elseif GAME.state == "crushed" then
     cls()
     print("YOU ARE CRUSHED")
@@ -474,14 +507,14 @@ ffff00000005566500004000000550004555555444444454f887788fe66666ef4665504960506050
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-94440000544440540000000044444440005445003b33333300555550000000000000000000000000000000000000000000000000000000000000000000000000
-ffff0000544440540000000056614140007c4c00bb3333b306666650000000000000000000000000000000000000000000000000000000000000000000000000
-75f50000000000000000000055554140007c7c003333b33306000650000000000000000000000000000000000000000000000000000000000000000000000000
-ffff0000505555550000000041414540007ccc003b333b33060bb650000000000000000000000000000000000000000000000000000000000000000000000000
-3bbb0000405444440000000041415650007cc700b333bbb306b00650000000000000000000000000000000000000000000000000000000000000000000000000
-f3bbf000405444440000000041414540007c7c003b33333306666650000000000000000000000000000000000000000000000000000000000000000000000000
-111100000000000000000000566141400074cc00bbb3333367777670000000000000000000000000000000000000000000000000000000000000000000000000
-10010000555550550000000055554440005445003333333366666006000000000000000000000000000000000000000000000000000000000000000000000000
+94440000544440540000000044444440005445003b33333300555550005555500000000000000000000000000000000000000000000000000000000000000000
+ffff0000544440540000000056614140007c4c00bb3333b306666650066666500000000000000000000000000000000000000000000000000000000000000000
+75f50000000000000000000055554140007c7c003333b33306000650060006500000000000000000000000000000000000000000000000000000000000000000
+ffff0000505555550000000041414540007ccc003b333b330600065006b006500000000000000000000000000000000000000000000000000000000000000000
+3bbb0000405444440000000041415650007cc700b333bbb306000650060006500000000000000000000000000000000000000000000000000000000000000000
+f3bbf000405444440000000041414540007c7c003b33333306666650066666500000000000000000000000000000000000000000000000000000000000000000
+111100000000000000000000566141400074cc00bbb3333367778670677786700000000000000000000000000000000000000000000000000000000000000000
+10010000555550550000000055554440005445003333333366666006666660060000000000000000000000000000000000000000000000000000000000000000
 __label__
 88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888
 88888ffffff882222228888888888888888888888888888888888888888888888888888888888888888228228888ff88ff888222822888888822888888228888
