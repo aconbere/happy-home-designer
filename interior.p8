@@ -32,10 +32,11 @@ ITEM_TYPES = {
   old_tv         = { sprite = 24 }, 
   computer       = { sprite = 54 }, 
   computer_chair = { sprite = 25 }, 
+  wall           = { sprite = 49 },
 }
 
 COST = 10
-EARNED = 60
+EARNED = 50
 DROP_ACCELERATION = 1
 DROP_TIMER = 80
 
@@ -53,8 +54,10 @@ function keys(t)
   local n = 0
 
   for k,v in pairs(t) do
-    n += 1
-    ks[n] = k
+    if k != "wall" then
+      n += 1
+      ks[n] = k
+    end
   end
 
   return ks, n
@@ -302,6 +305,21 @@ COMPUTER_CHAIR = item_new("computer_chair", {
   pos = {x = 8, y = 3},
   movable = false,
   label = "your chair",
+})
+
+WALL1 = item_new("wall", {
+  pos = {x = 3, y = 2},
+  movable = false,
+})
+
+WALL2 = item_new("wall", {
+  pos = {x = 3, y = 6},
+  movable = false,
+})
+
+WALL3 = item_new("wall", {
+  pos = {x = 7, y = 6},
+  movable = false,
 })
 
 HERO = hero_new {pos = {x = 5, y = 4}}
