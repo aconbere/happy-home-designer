@@ -36,6 +36,15 @@ ITEM_TYPES = {
 
 COST = 40
 
+function shuffle(tbl)
+  for i = #tbl, 2, -1 do
+    local j = flr(rnd(i)) + 1
+    tbl[i], tbl[j] = tbl[j], tbl[i]
+  end
+
+  return tbl
+end
+
 function keys(t)
   local ks = {}
   local n = 0
@@ -56,6 +65,12 @@ ENTITY_ID = 0
 MAP_X_COUNT = 10
 MAP_Y_COUNT = 7
 
+MAP_POS = {
+  x = 2,
+  y = 3,
+}
+
+
 MAP = {
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
@@ -66,8 +81,13 @@ MAP = {
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
 }
 
+function pos_to_str(pos)
+  return "{".. pos.x ..", ".. pos.y .. "}"
+end
+
 function map_get(pos)
   e = MAP[pos.y][pos.x]
+
   if e == 0 then
     return nil
   end
@@ -92,10 +112,14 @@ function next_id()
   return ENTITY_ID
 end
 
+-- quick note because I often forget the background map is in tiles not pixels
+-- WHOAT okay so this mget function seems to be absolute to its position
+-- in the screen. So this function is /uneffected/ by the shift down for text
 function bg_collision(pos, flag)
   local pos = {
-    x = pos.x + 2,
-    y = pos.y + 2
+    x = pos.x + MAP_POS.x,
+    -- this -1 accomodates the shift down for text
+    y = pos.y + MAP_POS.y - 1, 
   }
 
   if fget(mget(pos.x, pos.y), flag) then
@@ -106,7 +130,6 @@ function bg_collision(pos, flag)
 end
 
 function entity_collision(entity_a, entity_b)
-  printh(entity_a.label, entity_b.label)
   if
     ((entity_a.pos.x + entity_a.dim.x) > entity_b.pos.x) and
     (entity_a.pos.x                    < (entity_b.pos.x + entity_b.dim.x)) and
@@ -118,10 +141,19 @@ function entity_collision(entity_a, entity_b)
  return false
 end
 
+-- takes a map relative sprite position and maps it into the pixel
+-- positions of the screen.
+-- 
+-- given a map draw at 16,16 we previously converted the pixel locations
+-- into sprite boundaries for easyness so this is represented as 2,2
+-- and a map relative position of 3,3
+--
+-- we would first add the map position and the relative positions together
+-- to get 5,5 then multiply by 8 to get the pixel location (40,40)
 function scale_position(pos)
   return {
-    x = (pos.x + 2) * 8,
-    y = (pos.y + 2) * 8,
+    x = (pos.x + MAP_POS.x) * 8,
+    y = (pos.y + MAP_POS.y) * 8,
   }
 end
 
@@ -203,8 +235,6 @@ end
 function item_new(item_type, opts)
   item_config = ITEM_TYPES[item_type]
 
-  printh(item_type)
-
   return entity_new {
     label = item_type,
     sprite = { index = item_config.sprite },
@@ -216,10 +246,30 @@ function item_new(item_type, opts)
   }
 end
 
+function rnd_math_p()
+  local x = flr(rnd(100))
+  local y = flr(rnd(100))
+  return x + y
+end
+
 function problem_new()
+  local x = flr(rnd(100))
+  local y = flr(rnd(100))
+
+  local answer = x + y
+  
+  local options = {
+    rnd_math_p(), rnd_math_p(), rnd_math_p(), answer
+  }
+
+  shuffle(options)
+
   return {
-    x = flr(rnd(100)),
-    y = flr(rnd(100)),
+    x = x,
+    y = y,
+    options = options,
+    answer = answer,
+    selected = nil
   }
 end
 
@@ -270,7 +320,6 @@ function shift_dir(start, dir)
   local next_pos = apply_dir(start, dir)
 
   if not in_map(next_pos) then
-    printh("out of map")
     return false
   end
 
@@ -381,7 +430,6 @@ function find_empty()
   end
 
   if count == 0 then
-    printh("NO ROOM")
     return nil
   end
 
@@ -397,8 +445,42 @@ function random_item(pos)
   })
 end
 
+function btn_choice_index()
+  if (btnp(0)) then
+    return 1
+  elseif (btnp(1)) then
+    return 2
+  elseif (btnp(2)) then
+    return 3
+  elseif (btnp(3)) then
+    return 4
+  end
+end
+
+function working_update()
+  if btnp(4) and GAME.problem.selected then
+    if GAME.problem.selected == GAME.problem.answer then
+      printh("CORRECT")
+      GAME.target_cash += 10
+      GAME.problem = problem_new()
+    else
+      printh("INCORRECT")
+      GAME.problem = problem_new()
+    end
+  elseif btnp(5) then
+    GAME.state = "decorating"
+  else
+    local choice = GAME.problem.options[btn_choice_index()]
+
+    if choice then
+      GAME.problem.selected = choice
+    end
+  end
+end
+
 function _update()
   if GAME.state == "working" then
+    working_update()
   elseif GAME.state == "decorating" then
     -- 30fps * 10s
     if GAME.drop_timer > 200 then
@@ -427,7 +509,7 @@ end
 function update_cursor_state()
     GAME.cursor_blink_timer += 1
 
-    if GAME.cursor_blink_timer >= 30 then
+    if GAME.cursor_blink_timer >= 15 then
       GAME.cursor_blink_timer = 0
 
       if GAME.cursor_state then
@@ -438,17 +520,22 @@ function update_cursor_state()
     end
 end
 
+options_map = {"\139", "\145", "\148", "\131"}
+
 function _draw()
   update_cursor_state()
   if GAME.state == "decorating" then
+
     if GAME.cash > GAME.target_cash then
       GAME.cash -= 1
+    elseif GAME.cash < GAME.target_cash then
+      GAME.cash += 1
     end
 
     GAME.drop_timer += 1
 
     cls()
-    map(0,0,0,0,64,64)
+    map(0,0,0,8,64,64)
 
     for y, row in ipairs(MAP) do
       for x, e in ipairs(row) do 
@@ -462,7 +549,7 @@ function _draw()
     cls()
 
     if GAME.cursor_state then
-      cursor = ">"
+      cursor = "_"
     else
       cursor = " "
     end
@@ -471,8 +558,17 @@ function _draw()
 
     color(11)
     print(problem)
-    print("")
-    print(cursor.. " _")
+
+    for i, v in ipairs(GAME.problem.options) do
+      print(options_map[i] .. ": " .. v)
+    end
+
+    if GAME.problem.selected then
+      print("> " .. GAME.problem.selected .. " " .. cursor)
+    else
+      print("> " .. cursor)
+    end
+    color(7)
   elseif GAME.state == "crushed" then
     cls()
     print("YOU ARE CRUSHED")
