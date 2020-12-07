@@ -76,7 +76,6 @@ MAP_POS = {
   y = 3,
 }
 
-
 MAP = {
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
   { NE, NE, NE, NE, NE, NE, NE, NE, NE, NE },
@@ -221,6 +220,7 @@ function game_new()
     drop_timer = 0,
     work_timer = 0,
     cursor_blink_timer = 0,
+    interstitial_timer = 0,
     cusor_state = true,
     state = "decorating",
     problem = problem_new(),
@@ -482,8 +482,10 @@ function working_update()
     if GAME.problem.selected == GAME.problem.answer then
       GAME.target_cash += EARNED
       GAME.problem = problem_new()
+      GAME.state = "correct"
     else
       GAME.problem = problem_new()
+      GAME.state = "incorrect"
     end
   elseif btnp(5) then
     GAME.state = "decorating"
@@ -521,6 +523,20 @@ function _update()
     working_update()
   elseif GAME.state == "decorating" then
     hero_update(HERO)
+  elseif GAME.state == "correct" then
+    GAME.interstitial_timer += 1
+
+    if GAME.interstitial_timer >= 30 then
+      GAME.interstitial_timer = 0
+      GAME.state = "working"
+    end
+  elseif GAME.state == "incorrect" then
+    GAME.interstitial_timer += 1
+
+    if GAME.interstitial_timer >= 30 then
+      GAME.interstitial_timer = 0
+      GAME.state = "working"
+    end
   end
 end
 
@@ -590,6 +606,20 @@ function _draw()
     else
       print("> " .. cursor)
     end
+    color(7)
+  elseif GAME.state == "correct" then
+    cls()
+    print("CASH: $"..GAME.cash)
+    print("")
+    color(11)
+    print("CORRECT")
+    color(7)
+  elseif GAME.state == "incorrect" then
+    cls()
+    print("CASH: $"..GAME.cash)
+    print("")
+    color(8)
+    print("INCORRECT")
     color(7)
   elseif GAME.state == "crushed" then
     cls()
